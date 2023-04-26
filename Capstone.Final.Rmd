@@ -1,0 +1,254 @@
+---
+title: "Capstone"
+author: "Zhirui Xiong"
+date: "3/16/2023"
+output:
+  word_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(readr)
+library(dplyr)
+library(faraway)
+library(ggplot2)
+require(caret)
+library(MASS)
+library(ResourceSelection)
+library(pROC)
+library(ROCR) 
+library(plotROC)
+library(scales)
+library(viridis)
+library(RColorBrewer)
+library(viridisLite)
+```
+
+```{r data}
+combine<-read.csv("/Users/zx/Desktop/new.II.csv")
+```
+
+
+```{r model all}
+model_all <- glm(Last_Financing_Deal_Type ~State_incorporation+Type_entity+LOCAL+TRADED+five+ten+thirteen+twentythree+twentyfour+thirty+oneothree+oneoseven+onefourteen+Num_of_name+fame_included, family = binomial(), combine)
+summary(model_all)
+                       
+```
+
+
+```{r stepwise testing}
+logit_model<-stepAIC(model_all)
+summary(logit_model)
+```
+
+
+```{r categories summary}
+LBO <- data.frame(combine[combine$name=="Buyout/LBO",])
+Corporate <- data.frame(combine[combine$name=='Corporate',])
+IPO <- data.frame(combine[combine$name=='IPO',])
+Later_Stage_VC <- data.frame(combine[combine$name=='Later Stage VC',])
+Merger_Acquisition <- data.frame(combine[combine$name=='Merger/Acquisition',])
+PE_Growth_Expansion <- data.frame(combine[combine$name=='PE Growth/Expansion',])
+success<-rbind(LBO, Corporate, IPO, Later_Stage_VC, Merger_Acquisition, PE_Growth_Expansion) 
+other <- anti_join(combine,success)
+```
+
+
+```{r bar plot to visulize the data}
+# Create data and labels
+x <- c(nrow(LBO), nrow(IPO), nrow(Corporate), nrow(Later_Stage_VC), nrow(Merger_Acquisition), nrow(PE_Growth_Expansion), nrow(other))
+labels <- c("Buyout/LBO", 'Later Stage VC','Corporate', 'IPO', 'Merger/Acquisition', 'PE Growth/Expansion', "Other Financial Instruments")
+
+# Create a color palette for the pie chart
+colors <- viridis(length(x))
+
+# Calculate the percentages
+percentages <- percent(x/sum(x))
+y<-x/sum(x)*100
+
+
+# Create a horizontal bar plot
+barplot(y, horiz = TRUE, col = colors, main = "Distribution of Financial Instruments: Financial Instruments Indicated in Response Variable as Successful V.S. Other", xlab = "Percentage Ratio of Counts in Each Category to All Financial Instruments", xlim=c(0,100))
+
+# Add legend
+legend("topright", legend = labels, fill = colors, cex=0.4)
+
+```
+
+```{r visualization I}
+success<-rbind(LBO, Corporate, IPO, Later_Stage_VC, Merger_Acquisition, PE_Growth_Expansion) 
+other <- anti_join(combine,success)
+
+success<-rbind(LBO, Corporate, IPO, Later_Stage_VC, Merger_Acquisition, PE_Growth_Expansion) 
+
+ggplot(success, aes(x = name, y = fit_value, fill = name)) +
+  geom_violin() +
+  labs(title = "Probability of Biotech Startups Reaching Financial Success by Categories", x = "Category", y = "Probability of Reaching Financial Success", fill = "Category") +
+  guides(fill=guide_legend(title="Category"))
+
+```
+
+```{r visulization II}
+other <- anti_join(combine,success)
+data1 <- data.frame(
+  group = rep("Other"),
+  value = other$fit_value
+)
+data2 <- data.frame(
+  group = rep("Financial Instruments Indicating Success: Buyout/LBO, Corporate, IPO, Later Stage VC, Merger/Acquisition, PE Growth/Expansion"),
+  value = success$fit_value
+)
+
+# Combine the datasets
+data <- rbind(data1, data2)
+
+# Create the boxplot
+ggplot(data, aes(x = group, y = value, fill = group)) +
+  geom_boxplot() +
+  labs(title = "Probability of Biotech Startups Reaching Financial Success: Financial Instrument Indicating Success V.S. Other", x = "Category", y = "Probability of Reaching Financial Success", fill = "Category") +
+  ylim(0, 1) +
+  scale_fill_manual(values = brewer.pal(8, "Set3")) +
+  scale_color_manual(values = brewer.pal(8, "Set1"))
+
+```
+
+
+```{r visualization III}
+category_number <- c("Buyout/LBO", 'Later Stage VC','Corporate', 'IPO', 'Merger/Acquisition', 'PE Growth/Expansion', "Other Financial Instruments")
+
+mean_probs <- aggregate(fit_value ~ name, data = combine, FUN = mean)
+
+ggplot(mean_probs, aes(x = name, y = fit_value, fill = name)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = name), position = position_stack(vjust = 1.05)) +
+  labs(title = "Average Probability of Biotech Startups Reaching Success by Category",
+       x = "Category", y = "Probability of Reaching Success",
+       fill = "Category") +
+  scale_fill_viridis_d(option = "D", direction = -1) +
+  ylim(0, 1)
+```
+
+
+
+```{r model 1, echo=FALSE}
+model1 <- glm(Last_Financing_Deal_Type ~ State_incorporation + Type_entity + LOCAL + five + thirteen + Num_of_name + fame_included, family = binomial(), combine)
+
+#Perform the Hosmer-Lemeshow test
+hoslem.test(model1$fitted.values, combine$Last_Financing_Deal_Type, g = 10)
+```
+
+```{r model 1a, echo=FALSE}
+# Create the ROC curve
+roc(Last_Financing_Deal_Type ~ predict(model1, type = "response"), data = combine)
+```
+
+
+```{r model 2, echo=FALSE}
+model2 <- glm(Last_Financing_Deal_Type ~ State_incorporation + Type_entity + five + thirteen + Num_of_name + fame_included
+
+, family = binomial(), combine)
+
+# Perform the Hosmer-Lemeshow test
+hoslem.test(model2$fitted.values, combine$Last_Financing_Deal_Type, g = 10)
+```
+
+```{r model 2a, echo=FALSE}
+# Create the ROC curve
+roc(Last_Financing_Deal_Type ~ predict(model2, type = "response"), data = combine)
+```
+
+```{r model 3, echo=FALSE}
+model3 <- glm(Last_Financing_Deal_Type ~ State_incorporation + Type_entity + 
+    five + thirteen + fame_included
+, family = binomial(), combine)
+
+# Perform the Hosmer-Lemeshow test
+hoslem.test(model3$fitted.values, combine$Last_Financing_Deal_Type, g = 10)
+
+```
+
+```{r model 3a, echo=FALSE}
+# Create the ROC curve
+roc(Last_Financing_Deal_Type ~ predict(model3, type = "response"), data = combine)
+```
+
+```{r model 4, echo=FALSE}
+model4 <- glm(Last_Financing_Deal_Type ~ Type_entity + five + thirteen + fame_included, family = binomial(), combine)
+
+# Perform the Hosmer-Lemeshow test
+hoslem.test(model4$fitted.values, combine$Last_Financing_Deal_Type, g = 10)
+```
+
+```{r model 4a, echo=FALSE}
+# Create the ROC curve
+roc(Last_Financing_Deal_Type ~ predict(model4, type = "response"), data = combine)
+```
+
+
+
+```{r model 5, echo=FALSE}
+model5 <- glm(Last_Financing_Deal_Type ~ five + thirteen + fame_included, family = binomial(), combine)
+
+# Perform the Hosmer-Lemeshow test
+hoslem.test(model5$fitted.values, combine$Last_Financing_Deal_Type, g = 10)
+```
+
+```{r model 5a, echo=FALSE}
+# Create the ROC curve
+roc(Last_Financing_Deal_Type ~ predict(model5, type = "response"), data = combine)
+```
+
+```{r ROC curve visualization, echo=FALSE}
+# Create a prediction using model
+pred1 <- predict(model1, type = "response")
+pred2 <- predict(model2, type = "response")
+pred3 <- predict(model3, type = "response")
+pred4 <- predict(model4, type = "response")
+pred5 <- predict(model5, type = "response")
+
+# Calculate the ROC curve
+roc_obj1 <- roc(Last_Financing_Deal_Type ~ pred1, data = combine)
+roc_obj2 <- roc(Last_Financing_Deal_Type ~ pred2, data = combine)
+roc_obj3 <- roc(Last_Financing_Deal_Type ~ pred3, data = combine)
+roc_obj4 <- roc(Last_Financing_Deal_Type ~ pred4, data = combine)
+roc_obj5 <- roc(Last_Financing_Deal_Type ~ pred5, data = combine)
+
+# Plot the ROC curve
+#plot all 5 models
+plot(roc_obj1, col = "blue", main = "ROC Curves for All Models", lwd = 2, xlab = "False Positive Rate", ylab = "True Positive Rate")
+lines(roc_obj2, col = "red")
+lines(roc_obj3, col = "green")
+lines(roc_obj4, col = "purple")
+lines(roc_obj5, col = "yellow")
+
+legend("bottomright", legend = c("Model 1", "Model 2", "Model 3", "Model 4", "Model 5"), col = c("blue", "red", "green", "purple", "yellow"), lty = 1, cex=0.7)
+
+#plot model 3 V.S. 5
+plot(roc_obj3, col = "green", main = "ROC Curves for Model 3 V.S. Model 5", lwd = 2, xlab = "False Positive Rate", ylab = "True Positive Rate")
+lines(roc_obj5, col = "yellow")
+
+legend("bottomright", legend = c("Model 3", "Model 5"), col = c("green", "yellow"), lty = 1, cex=0.7)
+
+#plot model 1 V.S. 2 V.S. 4
+plot(roc_obj1, col = "red", main = "ROC Curves for Model 1 V.S. Model 2 V.S. Model 4", lwd = 2, xlab = "False Positive Rate", ylab = "True Positive Rate")
+lines(roc_obj2, col = "yellow")
+lines(roc_obj4, col = "green")
+
+
+legend("bottomright", legend = c("Model 1", "Model 2", "Model 4"), col = c("red", "yellow", "green"), lty = 1, cex=0.7)
+
+
+
+```
+
+
+```{r write csv}
+prob <- predict(model5, combine, type = "response")
+write_csv(data.frame(prob), path="/Users/zx/Desktop/capstone_data.csv")
+```
+
+
+
+
+
