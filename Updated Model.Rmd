@@ -1,0 +1,426 @@
+---
+title: "Capstone"
+author: "ZX"
+date: "3/16/2023"
+output:
+  word_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(readr)
+library(dplyr)
+library(faraway)
+library(ggplot2)
+require(caret)
+library(MASS)
+library(ResourceSelection)
+library(pROC)
+library(ROCR) 
+library(plotROC)
+library(scales)
+library(viridis)
+library(RColorBrewer)
+library(viridisLite)
+library(psych)
+library(effects)
+library(caret)
+library(usdm)
+```
+
+```{r data}
+combine<-read.csv("/Users/zx/Desktop/new.II.csv")
+vif_data<-read.csv("/Users/zx/Desktop/vif.II.csv")
+final<-read.csv("/Users/zx/Desktop/final.II.csv")
+```
+
+```{r data}
+# Create a new dataset with the desired columns
+new_data <- final[, c("State_incorporation", "Type_entity", "TRADED", "five", "thirteen", "Num_of_name")]
+#vif_v<-vifstep(new_data,th=10)
+#vif_v
+#vif(vif_data)
+# Load the "car" package for VIF calculation
+library(car)
+
+# Calculate VIF values for predictor variables
+vif_values <- car::vif(model_e3)
+```
+# Correlation 
+```{r correlation}
+cor.test(combine$Last_Financing_Deal_Type, combine$five)
+cor.test(combine$Last_Financing_Deal_Type, combine$thirteen)
+cor.test(combine$Last_Financing_Deal_Type, combine$fame_included)
+cor.test(combine$Last_Financing_Deal_Type, combine$Num_of_name)
+cor.test(combine$Last_Financing_Deal_Type, combine$Type_entity)
+cor.test(combine$Last_Financing_Deal_Type, combine$State_incorporation)
+cor.test(combine$Last_Financing_Deal_Type, combine$TRADED)
+```
+
+
+```{r correlation for delaware}
+cor.test(combine$State_incorporation, combine$Type_entity)
+cor.test(combine$State_incorporation, combine$TRADED)
+cor.test(combine$State_incorporation, combine$five)
+cor.test(combine$State_incorporation, combine$thirteen)
+cor.test(combine$State_incorporation, combine$Num_of_name)
+cor.test(combine$State_incorporation, combine$fame_included)
+```
+
+```{r correlation for corporation}
+cor.test(combine$Type_entity, combine$TRADED)
+cor.test(combine$Type_entity, combine$five)
+cor.test(combine$Type_entity, combine$thirteen)
+cor.test(combine$Type_entity, combine$Num_of_name)
+cor.test(combine$Type_entity, combine$fame_included)
+```
+
+```{r correlation for traded}
+cor.test(combine$TRADED, combine$five)
+cor.test(combine$TRADED, combine$thirteen)
+cor.test(combine$TRADED, combine$Num_of_name)
+cor.test(combine$TRADED, combine$fame_included)
+```
+
+```{r correlation for five}
+cor.test(combine$five, combine$thirteen)
+cor.test(combine$five, combine$Num_of_name)
+cor.test(combine$five, combine$fame_included)
+```
+
+```{r correlation for thirteen}
+cor.test(combine$thirteen, combine$Num_of_name)
+cor.test(combine$thirteen, combine$fame_included)
+```
+
+```{r correlation for num}
+cor.test(combine$Num_of_name, combine$fame_included)
+```
+
+# Models
+
+#roc_all<-roc(Last_Financing_Deal_Type ~ predict(model_all, type = "response"), data = combine)
+
+```{r model A1}
+model_a1 <- glm(Last_Financing_Deal_Type ~State_incorporation+Type_entity+TRADED+five+thirteen+Num_of_name, family = binomial(), final)
+summary(model_a1) 
+#1 - pchisq(-2 * (1017.45 - 930.19), 733 - 727)=1 
+```
+
+```{r model A2}
+model_b1 <- glm(Last_Financing_Deal_Type ~State_incorporation+Type_entity+TRADED+five+thirteen+Num_of_name+Num_of_name*five+Num_of_name*thirteen+five*State_incorporation+thirteen*State_incorporation, family = binomial(), final)
+
+summary(model_b1)    
+E1 - pchisq(-2 * (1017.45 - 927.97), 733 - 723)=1
+```
+
+```{r model C2}
+model_c2 <- glm(Last_Financing_Deal_Type ~five+thirteen+Num_of_name, family = binomial(), final)
+
+summary(model_c2) 
+1 - pchisq(-2 * (1017.45 - 931.12), 733 - 730)
+
+```
+
+```{r model D2}
+model_d2 <- glm(Last_Financing_Deal_Type ~five+thirteen+Num_of_name+Num_of_name*five+Num_of_name*thirteen, family = binomial(), final)
+
+summary(model_d2) 
+1 - pchisq(-2 * (1017.45 -  930.69), 733 - 728)
+```
+
+```{r model all stepwise AIC testing}
+model_all_stepwise_AIC <-step(model_a1,direction="both",k=2)
+summary(model_all_stepwise_AIC)
+```
+
+```{r model all stepwise BIC testing}
+model_all_stepwise_BIC <-step(model_a1,direction="both",k=log(nrow(final)))
+summary(model_all_stepwise_BIC)
+model_BIC <- glm(Last_Financing_Deal_Type ~ five, family = binomial(), final)
+summary(model_BIC)
+1 - pchisq(-2 * (1017.45 -  936.27), 733 - 732)
+```
+
+```{r model e3, echo=FALSE}
+model_e3 <- glm(Last_Financing_Deal_Type ~ five + thirteen, family = binomial(), combine)
+
+summary(model_e3)
+1 - pchisq(-2 * (960.96 -  786.08), 693 - 691)
+```
+
+
+
+#performance metrics test
+```{r performance metrics test, echo=FALSE}
+calculate_performance <- function(model, decision_threshold = 0.5) {
+  # Calculate predicted probabilities
+  predicted_probs <- predict(model, type = "response")
+
+  # Set decision threshold (default is 0.5)
+  predicted_classes <- ifelse(predicted_probs >= decision_threshold, 1, 0)
+
+  # Extract actual labels
+  #actual_labels <- final$Last_Financing_Deal_Type
+  actual_labels <- data$Last_Financing_Deal_Type
+
+
+  # Calculate confusion matrix
+  confusion_matrix <- table(predicted_classes, as.numeric(actual_labels))
+
+  # Calculate sensitivity
+  sensitivity <- confusion_matrix[2, 2] / sum(confusion_matrix[2, ])
+
+  # Calculate specificity
+  specificity <- confusion_matrix[1, 1] / sum(confusion_matrix[1, ])
+
+  # Calculate misclassification rate
+  misclassification_rate <- sum(diag(confusion_matrix)) / sum(confusion_matrix)
+
+  # Calculate precision (optional)
+  precision <- confusion_matrix[2, 2] / sum(confusion_matrix[, 2])
+
+  # Calculate ROC AUC using pROC package
+  roc_auc <- roc(actual_labels, predicted_probs)$auc
+
+  # Print the results
+  cat("Accuracy:", 1 - misclassification_rate, "\n")
+  cat("Precision:", precision, "\n")
+  cat("Sensitivity:", sensitivity, "\n")
+  cat("Specificity:", specificity, "\n")
+  cat("Misclassification Rate:", misclassification_rate, "\n")
+  cat("ROC AUC:", roc_auc, "\n")
+}
+
+```
+
+```{r print out performance metrics, echo=FALSE}
+calculate_performance(model_a1)
+calculate_performance(model_b1)
+calculate_performance(model_c2)
+calculate_performance(model_d2)
+calculate_performance(model_e3)
+
+```
+
+#likelihood ratio test 
+```{r likelihood ratio test, echo=FALSE}
+model_f3 <- glm(Last_Financing_Deal_Type ~ five, family = binomial(), combine)
+
+#anova(model_a1, model_e3, test = "Chisq")
+#anova(model_b1, model_e3, test = "Chisq")
+#anova(model_c2, model_e3, test = "Chisq")
+#anova(model_d2, model_e3, test = "Chisq")
+#anova(model_b1, model_a1, test = "Chisq")
+#anova(model_d2, model_c2, test = "Chisq")
+
+anova(model_a1, model_f3, test = "Chisq")
+anova(model_b1, model_f3, test = "Chisq")
+anova(model_c2, model_f3, test = "Chisq")
+anova(model_d2, model_f3, test = "Chisq")
+anova(model_e3, model_f3, test = "Chisq")
+```
+
+
+
+```{r model important dignosis, echo=FALSE}
+#plot(model_important)
+
+# Fit the logistic regression model
+model_final <- glm(Last_Financing_Deal_Type ~ five + thirteen + fame_included, family = binomial(), data = final)
+
+# Get leverage and standardized residuals
+leverage <- hatvalues(model_final)
+residuals <- resid(model_final, type = "pearson")
+
+# Calculate Cook's distance
+cook_distances <- (residuals^2 * leverage) / (1 - leverage)^2
+
+# Set a threshold to identify outliers
+threshold <- 0.014  # Adjust the threshold value as needed
+
+# Identify outliers based on Cook's distance
+outliers <- which(cook_distances > threshold)
+
+# Subset the data to get the outlier rows
+outliers_data <- final[outliers, ]
+
+#rows_to_delete <- c()
+
+# Assuming your data is stored in a variable called 'data'
+# Delete the specified rows
+final<-read.csv("/Users/zx/Desktop/vif.II.csv")
+data <- final[-rows_to_delete, ]
+
+
+```
+
+
+```{r rows, echo=FALSE}
+par(mfrow=c(2,2))
+final<-read.csv("/Users/zx/Desktop/final.II.csv")
+model_final <- glm(Last_Financing_Deal_Type ~ five + thirteen, family = binomial(), data = data)
+plot(model_final, cex=0.001)
+summary(model_final)
+```
+
+
+
+
+```{r plot auc roc curve, echo=FALSE}
+# Create the ROC curve
+auc_roc5<-roc(Last_Financing_Deal_Type ~ predict(model_e3, type = "response"), data = data)
+auc_roc5
+plot(auc_roc5)
+```
+```{r model for visualization, echo=FALSE}
+model_important <- glm(Last_Financing_Deal_Type ~ five + thirteen,
+                       family = binomial(), data = final)
+```
+
+```{r probability for sector 5 and 13, echo=FALSE}
+
+# Compute average probability when "five" is 0
+avg_prob_0_5 <- mean(predict(model_important, newdata = data.frame(combine[combine$five == 0, ]), type = "response"))
+
+# Compute average probability when "five" is 1
+avg_prob_1_5 <- mean(predict(model_important, newdata = data.frame(combine[combine$five == 1, ]), type = "response"))
+
+# Compute average probability when "thirteen" is 0
+avg_prob_0_13 <- mean(predict(model_important, newdata = data.frame(combine[combine$thirteen == 0, ]), type = "response"))
+
+# Compute average probability when "thirteen" is 1
+avg_prob_1_13 <- mean(predict(model_important, newdata = data.frame(combine[combine$thirteen == 1, ]), type = "response"))
+
+# Compute average probability when "five" is 0 and "thirteen" is 0
+avg_prob_0_5_0_13 <- mean(predict(model_important, newdata = data.frame(combine[combine$five == 0 & combine$thirteen == 0, ]), type = "response"))
+
+
+```
+
+```{r visualization sectors, echo=FALSE}
+
+
+# Create a sample data frame
+data <- data.frame(
+  predictor1 = c("Not Biopharma", "Biopharma", "Not R&D in Biotech", "R&D in Biotech"),
+  value = c(avg_prob_0_5, avg_prob_1_5, avg_prob_0_13, avg_prob_1_13)
+)
+
+# Create the bar plot with a beautiful color palette and remove the legend
+ggplot(data, aes(x = predictor1, y = value, fill = predictor1)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.9)) +
+  labs(x = "Sectors", y = "Probability of Financial Success") +
+  theme_minimal() +
+  coord_cartesian(ylim = c(0, 1)) +
+  ggtitle("Average Probability of Financial Success by Sectors") +
+  geom_text(aes(label = sprintf("%.2f", value)), position = position_dodge(width = 0.9), vjust = -0.5) +
+  scale_fill_manual(values = c("#FF6F61", "#FF6F61", "#F7CAC9", "#F7CAC9")) +  # Use custom color palette
+  guides(fill = FALSE)  # Remove the legend
+
+
+
+```
+
+```{r probability for legal information, echo=FALSE}
+model_important <- glm(Last_Financing_Deal_Type ~ five + thirteen,
+                       family = binomial(), data =final)
+
+# Compute average probability when "del" is 0
+avg_prob_0_del <- mean(predict(model_important, newdata = data.frame(combine[combine$State_incorporation == 0, ]), type = "response"))
+
+# Compute average probability when "del" is 1
+avg_prob_1_del <- mean(predict(model_important, newdata = data.frame(combine[combine$State_incorporation == 1, ]), type = "response"))
+
+# Compute average probability when "corp" is 0
+avg_prob_0_corp <- mean(predict(model_important, newdata = data.frame(combine[combine$Type_entity == 0, ]), type = "response"))
+
+# Compute average probability when "corp" is 1
+avg_prob_1_corp <- mean(predict(model_important, newdata = data.frame(combine[combine$Type_entity == 1, ]), type = "response"))
+```
+
+```{r visualization sectors, echo=FALSE}
+
+
+# Create a sample data frame
+data <- data.frame(
+  predictor1 = c("Not Delaware", "Delaware", " Not Corporation", "Corporation"),
+  value = c(avg_prob_0_del, avg_prob_1_del, avg_prob_0_corp, avg_prob_1_corp)
+)
+
+# Create the bar plot with the specified color palette and remove the legend
+ggplot(data, aes(x = predictor1, y = value, fill = predictor1)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
+  labs(x = "Legal Information", y = "Probability of Financial Success") +
+  theme_minimal() +
+  coord_cartesian(ylim = c(0, 1)) +
+  ggtitle("Average Probability of Financial Success based on Legal Information") +
+  scale_fill_manual(values = c("#FF6F61", "#FF6F61", "#F7CAC9", "#F7CAC9")) +  # Custom color palette
+  guides(fill = FALSE)  # Remove the legend
+
+
+```
+
+
+```{r probability for traded and affiliation, echo=FALSE}
+
+# Compute average probability when "trade" is 0
+avg_prob_0_trade <- mean(predict(model_important, newdata = data.frame(combine[combine$TRADED == 0, ]), type = "response"))
+
+# Compute average probability when "trade" is 1
+avg_prob_1_trade <- mean(predict(model_important, newdata = data.frame(combine[combine$TRADED == 1, ]), type = "response"))
+
+```
+
+```{r visualization sectors, echo=FALSE}
+library(ggplot2)
+
+# Create a sample data frame
+data <- data.frame(
+  predictor1 = c("Not Traded", "Traded"),
+  value = c(avg_prob_0_trade, avg_prob_1_trade)
+)
+
+# Create the bar plot with colors and remove the legend
+ggplot(data, aes(x = predictor1, y = value, fill = predictor1)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
+  labs(x = "", y = "Probability of Financial Success") +
+  theme_minimal() +
+  coord_cartesian(ylim = c(0, 1)) +
+  ggtitle("Average Probability of Financial Success based on Traded") +
+  scale_fill_manual(values = c("#FF6F61", "#FF6F61")) +  # Custom color palette
+  guides(fill = FALSE)  # Remove the legend
+
+```
+
+```{r visualization sectors, echo=FALSE}
+
+# Compute average probability when "trade" is 0
+avg_prob_0_name <- mean(predict(model_important, newdata = data.frame(combine[combine$Num_of_name == 0, ]), type = "response"))
+
+# Compute average probability when "trade" is 1
+avg_prob_1_name <- mean(predict(model_important, newdata = data.frame(combine[combine$Num_of_name == 1, ]), type = "response"))
+
+# Create a sample data frame
+data <- data.frame(
+  predictor1 = c("No Short Name", "Short Name"),
+  value = c(avg_prob_0_name, avg_prob_1_name)
+)
+
+
+# Create the bar plot with colors and remove the legend
+ggplot(data, aes(x = predictor1, y = value, fill = predictor1)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
+  labs(x = "", y = "Probability of Financial Success") +
+  theme_minimal() +
+  coord_cartesian(ylim = c(0, 1)) +
+  ggtitle("Average Probability of Financial Success on Length of Name") +
+  scale_fill_manual(values = c("#FF6F61", "#FF6F61")) +  # Custom color palette
+  guides(fill = FALSE)  # Remove the legend
+
+```
+
+
+
+```
